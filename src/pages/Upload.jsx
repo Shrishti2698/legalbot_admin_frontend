@@ -3,10 +3,11 @@ import { documentAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export default function Upload() {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [documentType, setDocumentType] = useState('bns');
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState(null);
+  const [results, setResults] = useState([]);
+  const [currentFile, setCurrentFile] = useState(0);
   const navigate = useNavigate();
 
   const documentTypes = [
@@ -22,34 +23,48 @@ export default function Upload() {
   ];
 
   const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile && !selectedFile.name.endsWith('.pdf')) {
-      alert('Only PDF files are allowed');
-      return;
+    const selectedFiles = Array.from(e.target.files);
+    const pdfFiles = selectedFiles.filter(file => file.name.endsWith('.pdf'));
+    
+    if (pdfFiles.length !== selectedFiles.length) {
+      alert('Only PDF files are allowed. Non-PDF files were filtered out.');
     }
-    setFile(selectedFile);
+    
+    setFiles(pdfFiles);
   };
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!file) return;
+    if (files.length === 0) return;
 
     setUploading(true);
-    setResult(null);
+    setResults([]);
+    setCurrentFile(0);
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('document_type', documentType);
+    const uploadResults = [];
 
-    try {
-      const response = await documentAPI.upload(formData);
-      setResult(response.data);
-      setFile(null);
-    } catch (error) {
-      alert('Upload failed: ' + (error.response?.data?.detail || error.message));
-    } finally {
-      setUploading(false);
+    for (let i = 0; i < files.length; i++) {
+      setCurrentFile(i + 1);
+      const formData = new FormData();
+      formData.append('file', files[i]);
+      formData.append('document_type', documentType);
+
+      try {
+        const response = await documentAPI.upload(formData);
+        uploadResults.push({ success: true, data: response.data, filename: files[i].name });
+      } catch (error) {
+        uploadResults.push({ 
+          success: false, 
+          error: error.response?.data?.detail || error.message,
+          filename: files[i].name 
+        });
+      }
     }
+
+    setResults(uploadResults);
+    setFiles([]);
+    setUploading(false);
+    setCurrentFile(0);
   };
 
   return (
@@ -68,14 +83,20 @@ export default function Upload() {
           <input
             type="file"
             accept=".pdf"
+            multiple
             onChange={handleFileChange}
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
             required
           />
-          {file && (
-            <p className="mt-2 text-sm text-gray-600">
-              Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
-            </p>
+          {files.length > 0 && (
+            <div className="mt-2 space-y-1">
+              <p className="text-sm font-medium text-gray-700">{files.length} file(s) selected:</p>
+              {files.map((file, idx) => (
+                <p key={idx} className="text-sm text-gray-600 ml-2">
+                  • {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                </p>
+              ))}
+            </div>
           )}
         </div>
 
@@ -102,10 +123,10 @@ export default function Upload() {
         <div className="flex space-x-4">
           <button
             type="submit"
-            disabled={!file || uploading}
+            disabled={files.length === 0 || uploading}
             className="btn-primary flex-1"
           >
-            {uploading ? 'Processing...' : 'Upload & Process'}
+            {uploading ? `Processing ${currentFile}/${files.length}...` : `Upload & Process ${files.length} File(s)`}
           </button>
           <button
             type="button"
@@ -117,39 +138,49 @@ export default function Upload() {
         </div>
       </form>
 
-      {/* Processing Result */}
-      {result && (
-        <div className="card bg-green-50 border border-green-200">
-          <h3 className="text-lg font-bold text-green-800 mb-4">✅ Upload Successful!</h3>
+      {/* Processing Results */}
+      {results.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold text-gray-800">Upload Results ({results.length} files)</h3>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Pages Extracted</p>
-              <p className="text-2xl font-bold text-green-700">{result.processing_stats.pages_extracted}</p>
+          {results.map((result, idx) => (
+            <div key={idx} className={`card ${result.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h4 className={`font-bold ${result.success ? 'text-green-800' : 'text-red-800'}`}>
+                    {result.success ? '✅' : '❌'} {result.filename}
+                  </h4>
+                  
+                  {result.success ? (
+                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <p className="text-xs text-gray-600">Pages</p>
+                        <p className="text-lg font-bold text-green-700">{result.data.processing_stats.pages_extracted}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Chunks</p>
+                        <p className="text-lg font-bold text-green-700">{result.data.processing_stats.chunks_created}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Embeddings</p>
+                        <p className="text-lg font-bold text-green-700">{result.data.processing_stats.embeddings_generated}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Time</p>
+                        <p className="text-lg font-bold text-green-700">{result.data.processing_time_seconds}s</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-red-700">Error: {result.error}</p>
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-gray-600">Chunks Created</p>
-              <p className="text-2xl font-bold text-green-700">{result.processing_stats.chunks_created}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Embeddings</p>
-              <p className="text-2xl font-bold text-green-700">{result.processing_stats.embeddings_generated}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Processing Time</p>
-              <p className="text-2xl font-bold text-green-700">{result.processing_time_seconds}s</p>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-green-200">
-            <p className="text-sm text-gray-700">
-              <strong>Saved to:</strong> {result.saved_path}
-            </p>
-          </div>
+          ))}
 
           <button
             onClick={() => navigate('/documents')}
-            className="mt-4 btn-primary"
+            className="btn-primary w-full"
           >
             View All Documents
           </button>
