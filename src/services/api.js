@@ -4,7 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // 30 second timeout for production
+  timeout: 300000, // 5 minutes timeout for large file processing
   headers: {
     'Content-Type': 'application/json',
   },
@@ -31,7 +31,8 @@ export const authAPI = {
 export const documentAPI = {
   list: (folder) => api.get('/documents', { params: { folder } }),
   upload: (formData) => api.post('/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000 // 10 minutes for file uploads
   }),
   delete: (filename, folder) => api.delete('/documents', { data: { filename, folder } }),
 };
@@ -59,7 +60,7 @@ export const vectorStoreAPI = {
   search: (searchRequest) => 
     api.post('/vectorstore/search', searchRequest),
   rebuild: (rebuildRequest) => 
-    api.post('/vectorstore/rebuild', rebuildRequest),
+    api.post('/vectorstore/rebuild', rebuildRequest, { timeout: 1800000 }), // 30 minutes
   getRebuildStatus: (job_id) => api.get(`/vectorstore/rebuild/${job_id}`),
   clear: (clearRequest) => api.delete('/vectorstore/clear', { data: clearRequest }),
 };
