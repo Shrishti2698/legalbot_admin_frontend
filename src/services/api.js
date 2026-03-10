@@ -30,9 +30,10 @@ export const authAPI = {
 // Document APIs
 export const documentAPI = {
   list: (folder) => api.get('/documents', { params: { folder } }),
-  upload: (formData) => api.post('/upload', formData, {
+  upload: (formData, onUploadProgress) => api.post('/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 600000 // 10 minutes for file uploads
+    timeout: 1800000, // 30 minutes for very large files
+    onUploadProgress: onUploadProgress
   }),
   delete: (filename, folder) => api.delete('/documents', { data: { filename, folder } }),
 };

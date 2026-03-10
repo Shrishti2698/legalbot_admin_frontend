@@ -8,6 +8,7 @@ export default function Upload() {
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState([]);
   const [currentFile, setCurrentFile] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const navigate = useNavigate();
 
   const documentTypes = [
@@ -45,17 +46,21 @@ export default function Upload() {
 
     for (let i = 0; i < files.length; i++) {
       setCurrentFile(i + 1);
+      setUploadProgress(0);
       const formData = new FormData();
       formData.append('file', files[i]);
       formData.append('document_type', documentType);
 
       try {
-        const response = await documentAPI.upload(formData);
+        const response = await documentAPI.upload(formData, (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percentCompleted);
+        });
         uploadResults.push({ success: true, data: response.data, filename: files[i].name });
       } catch (error) {
         uploadResults.push({ 
           success: false, 
-          error: error.response?.data?.detail || error.message,
+          error: error.code === 'ECONNABORTED' ? 'Upload timeout - file too large or processing took too long' : (error.response?.data?.detail || error.message),
           filename: files[i].name 
         });
       }
@@ -126,7 +131,13 @@ export default function Upload() {
             disabled={files.length === 0 || uploading}
             className="btn-primary flex-1"
           >
-            {uploading ? `Processing ${currentFile}/${files.length}...` : `Upload & Process ${files.length} File(s)`}
+            {uploading ? (
+              <span>
+                Processing {currentFile}/{files.length}... {uploadProgress > 0 && `(${uploadProgress}%)`}
+              </span>
+            ) : (
+              `Upload & Process ${files.length} File(s)`
+            )}
           </button>
           <button
             type="button"
